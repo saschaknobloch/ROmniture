@@ -9,7 +9,7 @@ module ROmniture
       end
     end
 
-    class OmnitureReportNotReady < StandardError
+    class RequestInvalid < StandardError
       attr_reader :data
       def initialize(data)
         @data = data
@@ -17,7 +17,15 @@ module ROmniture
       end
     end
 
-    class OmnitureReportTriesExceeded < StandardError
+    class ReportNotReady < StandardError
+      attr_reader :data
+      def initialize(data)
+        @data = data
+        super
+      end
+    end
+
+    class TriesExceeded < StandardError
       attr_reader :data
       def initialize(data)
         @data = data

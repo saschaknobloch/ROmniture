@@ -28,6 +28,7 @@ module ROmniture
       HTTPI.log       = false
     end
 
+    # generic request
     def request(method, parameters = {})
       response = send_request(method, parameters)
 
@@ -41,17 +42,62 @@ module ROmniture
       end
     end
 
-    def get_report(method, report_description)
-      response = send_request(method, report_description)
-      json     = JSON.parse response.body
+    def get_report_suites
+      response = send_request("Company.GetReportSuites")
+      JSON.parse(response.body)
+    end
 
-      unless json["reportID"].nil?
-        log(Logger::INFO, "Report with ID (" + json["reportID"].to_s + ") queued.  Now fetching report...")
-        return get_queued_report json["reportID"]
-      else
-        log(Logger::ERROR, "Could not queue report.  Omniture returned with error:\n#{response.body}")
-        raise "Could not queue report.  Omniture returned with error:\n#{response.body}"
-      end
+    def enqueue_report(report_description)
+      response = send_request("Report.Queue", report_description)
+      json     = JSON.parse(response.body)
+
+      raise ROmniture::Exceptions::RequestInvalid.new(response.body) \
+        if json["reportID"].nil?
+
+      log(Logger::INFO, "Report with ID (" + json["reportID"].to_s + ") queued.")
+
+      json
+    end
+
+    def get_queue
+      response = send_request("Report.GetQueue")
+      JSON.parse(response.body)
+    end
+
+    def get_enqueued_report(report_id)
+      response_body = nil
+      done          = false
+      tries         = 0
+
+      begin
+        response      = send_request("Report.Get", {"reportID" => "#{report_id}"})
+        response_body = JSON.parse(response.body)
+        done          = true
+
+        log(Logger::INFO, "Fetching report #{report_id} done.")
+      rescue ROmniture::Exceptions::ReportNotReady => e
+        log(Logger::INFO, "Report #{report_id} not ready. Retrying in #{@wait_time} sec - Error: #{e}...")
+
+        tries += 1
+        if tries >= @max_tries
+          raise ROmniture::Exceptions::TriesExceeded.new({
+            error_msg: "Tried to fetch data for report #{report_id} #{tries} times with "   \
+                       "#{@wait_time} sec wait time between each request without success. " \
+                       "Maximum tries configured: #{@max_tries}"
+          }
+        )
+        end
+        sleep @wait_time
+      end while !done
+
+      log(Logger::INFO, "Report with ID #{report_id} has finished processing.")
+
+      response_body
+    end
+
+    def get_metrics(report_suite_id)
+     response = send_request("Report.GetMetrics", {"reportSuiteID" => "#{report_suite_id}"})
+     JSON.parse(response.body)
     end
 
     attr_writer :log
@@ -75,7 +121,7 @@ module ROmniture
 
     private
 
-    def send_request(method, data)
+    def send_request(method, data = {})
       log(Logger::INFO, "Requesting #{method}...")
       generate_nonce
 
@@ -95,11 +141,9 @@ module ROmniture
 
       if response.code >= 400
         if JSON.parse(response.body)["error"] == "report_not_ready"
-          log(Logger::INFO, "Report not ready.\n\n#{response.body}")
-          raise ROmniture::Exceptions::OmnitureReportNotReady.new(response.body)
+          raise ROmniture::Exceptions::ReportNotReady.new(response.body)
         else
-          log(Logger::ERROR, "Request failed and returned with response code: #{response.code}\n\n#{response.body}")
-          raise "Request failed and returned with response code: #{response.code}\n\n#{response.body}"
+          raise ROmniture::Exceptions::RequestInvalid.new(response.body)
         end
       end
 
@@ -122,38 +166,5 @@ module ROmniture
       }
     end
 
-    def get_queued_report(report_id)
-      start_time    = Time.now
-      end_time      = nil
-      response_body = nil
-      done          = false
-      tries         = 0
-
-      begin
-        response      = send_request("Report.Get", {"reportID" => "#{report_id}"})
-        response_body = JSON.parse(response.body)
-        done          = true
-
-        log(Logger::INFO, "Fetching report #{report_id} done.")
-      rescue ROmniture::Exceptions::OmnitureReportNotReady => e
-        log(Logger::INFO, "Report #{report_id} not ready. Retrying in #{@wait_time} sec - Error: #{e}...")
-
-        tries += 1
-        if tries >= @max_tries
-          raise ROmniture::Exceptions::OmnitureReportTriesExceeded.new({
-            error_msg: "Tried to fetch data for report #{report_id} #{tries} times with "   \
-                       "#{@wait_time} sec wait time between each request without success. " \
-                       "Maximum tries configured: #{@max_tries}"
-          }
-        )
-        end
-        sleep @wait_time
-      end while !done
-
-      end_time = Time.now
-      log(Logger::INFO, "Report with ID #{report_id} has finished processing in #{((end_time - start_time)*1000).to_i} ms")
-
-      response_body
-    end
   end
 end
