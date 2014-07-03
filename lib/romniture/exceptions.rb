@@ -16,5 +16,13 @@ module ROmniture
         super
       end
     end
+
+    class OmnitureReportTriesExceeded < StandardError
+      attr_reader :data
+      def initialize(data)
+        @data = data
+        super
+      end
+    end
   end
 end

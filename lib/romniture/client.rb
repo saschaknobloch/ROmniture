@@ -2,7 +2,10 @@ module ROmniture
 
   class Client
 
-    DEFAULT_REPORT_WAIT_TIME = 0.25
+    DEFAULT_REPORT_WAIT_TIME       = 0.25
+    DEFAULT_REPORT_TOTAL_WAIT_TIME = 120
+    DEFAULT_LOG_IS_ACTIVE          = false
+    DEFAULT_VERIFY_MODE_IS_ACTIVE  = false
 
     ENVIRONMENTS = {
       :san_jose       => "https://api.omniture.com/admin/1.4/rest/",
@@ -18,9 +21,10 @@ module ROmniture
       @shared_secret  = shared_secret
       @environment    = environment.is_a?(Symbol) ? ENVIRONMENTS[environment] : environment.to_s
 
-      @wait_time      = options[:wait_time] ? options[:wait_time] : DEFAULT_REPORT_WAIT_TIME
-      @log            = options[:log] ? options[:log] : false
-      @verify_mode    = options[:verify_mode] ? options[:verify_mode] : false
+      @wait_time      = options[:wait_time]   || DEFAULT_REPORT_WAIT_TIME
+      @max_tries      = options[:max_tries]   || (DEFAULT_REPORT_TOTAL_WAIT_TIME / @wait_time).to_i
+      @log            = options[:log]         || DEFAULT_LOG_IS_ACTIVE
+      @verify_mode    = options[:verify_mode] || DEFAULT_VERIFY_MODE_IS_ACTIVE
       HTTPI.log       = false
     end
 
@@ -124,14 +128,26 @@ module ROmniture
       start_time = Time.now
       end_time = nil
       response_body = nil
+      tries = 0
 
       begin
-        response = send_request("Report.Get", {"reportID" => "#{report_id}"})
+        response      = send_request("Report.Get", {"reportID" => "#{report_id}"})
         response_body = JSON.parse(response.body)
+        done          = true
+
         log(Logger::INFO, "Fetching report #{report_id} done.")
-        done = true
-      rescue ROmniture::Exceptions::OmnitureReportNotReady
-        log(Logger::INFO, "Report #{report_id} not ready. Retrying in #{@wait_time} ...")
+      rescue ROmniture::Exceptions::OmnitureReportNotReady => e
+        log(Logger::INFO, "Report #{report_id} not ready. Retrying in #{@wait_time} sec - Error: #{e}...")
+
+        tries += 1
+        if tries >= @max_tries
+          raise ROmniture::Exceptions::OmnitureReportTriesExceeded.new({
+            error_msg: "Tried to fetch data for report #{report_id} #{tries} times with "   \
+                       "#{@wait_time} sec wait time between each request without success. " \
+                       "Maximum tries configured: #{@max_tries}"
+          }
+        )
+        end
         sleep @wait_time
       end while !done
 
