@@ -43,8 +43,7 @@ module ROmniture
 
     def get_report(method, report_description)
       response = send_request(method, report_description)
-
-      json = JSON.parse response.body
+      json     = JSON.parse response.body
 
       unless json["reportID"].nil?
         log(Logger::INFO, "Report with ID (" + json["reportID"].to_s + ") queued.  Now fetching report...")
@@ -88,9 +87,9 @@ module ROmniture
         request.auth.ssl.verify_mode = @verify_mode
       end
 
-      request.url = @environment + "?method=#{method}"
+      request.url     = @environment + "?method=#{method}"
       request.headers = request_headers
-      request.body = data.to_json
+      request.body    = data.to_json
 
       response = HTTPI.post(request)
 
@@ -124,11 +123,11 @@ module ROmniture
     end
 
     def get_queued_report(report_id)
-      done = false
-      start_time = Time.now
-      end_time = nil
+      start_time    = Time.now
+      end_time      = nil
       response_body = nil
-      tries = 0
+      done          = false
+      tries         = 0
 
       begin
         response      = send_request("Report.Get", {"reportID" => "#{report_id}"})
