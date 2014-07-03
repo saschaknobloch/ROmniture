@@ -41,7 +41,8 @@ module ROmniture
       response = send_request(method, report_description)
 
       json = JSON.parse response.body
-      if json["status"] == "queued"
+
+      unless json["reportID"].nil?
         log(Logger::INFO, "Report with ID (" + json["reportID"].to_s + ") queued.  Now fetching report...")
         return get_queued_report json["reportID"]
       else
@@ -90,8 +91,13 @@ module ROmniture
       response = HTTPI.post(request)
 
       if response.code >= 400
-        log(:error, "Request failed and returned with response code: #{response.code}\n\n#{response.body}")
-        raise "Request failed and returned with response code: #{response.code}\n\n#{response.body}"
+        if JSON.parse(response.body)["error"] == "report_not_ready"
+          log(Logger::INFO, "Report not ready.\n\n#{response.body}")
+          raise ROmniture::Exceptions::OmnitureReportNotReady.new(response.body)
+        else
+          log(Logger::ERROR, "Request failed and returned with response code: #{response.code}\n\n#{response.body}")
+          raise "Request failed and returned with response code: #{response.code}\n\n#{response.body}"
+        end
       end
 
       log(Logger::INFO, "Server responded with response code #{response.code}.")
@@ -115,39 +121,24 @@ module ROmniture
 
     def get_queued_report(report_id)
       done = false
-      error = false
-      status = nil
       start_time = Time.now
       end_time = nil
+      response_body = nil
 
       begin
-        response = send_request("Report.GetStatus", {"reportID" => "#{report_id}"})
-        log(Logger::INFO, "Checking on status of report #{report_id}...")
-
-        json = JSON.parse(response.body)
-        status = json["status"]
-
-        if status == "done"
-          done = true
-        elsif status == "failed"
-          error = true
-        end
-
-        sleep @wait_time if !done && !error
-      end while !done && !error
-
-      if error
-        msg = "Unable to get data for report #{report_id}.  Status: #{status}.  Error Code: #{json["error_code"]}.  #{json["error_msg"]}."
-        log(:error, msg)
-        raise ROmniture::Exceptions::OmnitureReportException.new(json), msg
-      end
-
-      response = send_request("Report.GetReport", {"reportID" => "#{report_id}"})
+        response = send_request("Report.Get", {"reportID" => "#{report_id}"})
+        response_body = JSON.parse(response.body)
+        log(Logger::INFO, "Fetching report #{report_id} done.")
+        done = true
+      rescue ROmniture::Exceptions::OmnitureReportNotReady
+        log(Logger::INFO, "Report #{report_id} not ready. Retrying in #{@wait_time} ...")
+        sleep @wait_time
+      end while !done
 
       end_time = Time.now
       log(Logger::INFO, "Report with ID #{report_id} has finished processing in #{((end_time - start_time)*1000).to_i} ms")
 
-      JSON.parse(response.body)
+      response_body
     end
   end
 end
