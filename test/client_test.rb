@@ -20,44 +20,68 @@ class ClientTest < Test::Unit::TestCase
     )
   end
 
-  def test_simple_request
-    response = @client.request('Company.GetReportSuites')
+  def test_get_report_suites
+    response = @client.get_report_suites
 
     assert_instance_of Hash, response, "Returned object is not a hash."
     assert(response.has_key?("report_suites"), "Returned hash does not contain any report suites.")
   end
 
-  def test_report_request
-    response = @client.get_report "Report.QueueOvertime", {
+  def test_enqueue_report
+    response = @client.enqueue_report({
       "reportDescription" => {
         "reportSuiteID" => "#{@config["report_suite_id"]}",
-        "dateFrom" => "2011-01-01",
-        "dateTo" => "2011-01-10",
+        "dateFrom" => "2014-07-01",
+        "dateTo" => "2014-07-07",
         "metrics" => [{"id" => "pageviews"}]
-        }
-      }
+    }})
 
     assert_instance_of Hash, response, "Returned object is not a hash."
-    assert(response["report"].has_key?("data"), "Returned hash has no data!")
+    assert(response.has_key?("reportID"), "Returned hash has no data!")
   end
 
-  def test_a_bad_request
-    # Bad request, mixing commerce and traffic variables
-    assert_raise(ROmniture::Exceptions::OmnitureReportException) do
-      response = @client.get_report("Report.QueueTrended", {
+  def test_enqueue_report_with_invalid_metric_raises
+    assert_raises ROmniture::Exceptions::RequestInvalid do
+      response = @client.enqueue_report({
         "reportDescription" => {
-          "reportSuiteID" => @config["report_suite_id"],
-          "dateFrom" => "2011-01-01",
-          "dateTo" => "2011-01-11",
-          "metrics" => [{"id" => "pageviews"}, {"id" => "event11"}],
-          "elements" => [{"id" => "siteSection"}]
-        }
-      })
+          "reportSuiteID" => "#{@config["report_suite_id"]}",
+          "dateFrom" => "2014-07-01",
+          "dateTo" => "2014-07-07",
+          "metrics" => [{"id" => "INVALID_METRIXXXX"}]
+      }})
     end
   end
 
-  def test_return_response_body_on_parse_error
-    non_json_response = @client.request('Company.GetTokenCount')
-    assert_instance_of String, non_json_response, "Company.GetTokenCount returned #{non_json_response}."
+  def test_enqueue_report_with_invalid_metric_raises
+    assert_raises ROmniture::Exceptions::RequestInvalid do
+      response = @client.enqueue_report({
+        "reportDescription" => {
+          "reportSuiteID" => "INVALID_REPORT_SUITE_ID",
+          "dateFrom" => "2014-07-01",
+          "dateTo" => "2014-07-07",
+          "metrics" => [{"id" => "pageVIews"}]
+      }})
+    end
+  end
+
+  def test_get_queue
+    response = @client.get_queue
+    assert_instance_of Array, response, "Returned object is not an array."
+  end
+
+  def test_get_enqueued_report_wo_elements
+    response = @client.enqueue_report({
+      "reportDescription" => {
+        "reportSuiteID" => "#{@config["report_suite_id"]}",
+        "dateFrom" => "2014-07-01",
+        "dateTo" => "2014-07-07",
+        "metrics" => [{"id" => "pageviews"}]
+    }})
+    report_id = response["reportID"]
+
+    response = @client.get_enqueued_report(report_id)
+
+    assert_instance_of Hash, response, "Returned object is not a hash."
+    assert(response["report"].has_key?("data"), "Returned hash has no data!")
   end
 end
