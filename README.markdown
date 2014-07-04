@@ -48,7 +48,7 @@ The ROmniture client exposes the following methods:
 * `enqueue_report(parameters)` - enqueue a report 
 * `get_queue` - get the reports which are still in the queue and not ready for fetching
 * `get_enqueued_report(report_id)` - get the data for a previously enqueued report (if report is not ready it will retry as often as max_tries*wait_time)
-* ``
+* `get_metrics(report_suite_id)` - get all available metrics for a certain report suite
 
 For reference, I'd recommend keeping [Omniture's Developer Portal](http://developer.omniture.com) open as you code .  It's not the easiest to navigate but most of what you need is there.
 
