@@ -16,6 +16,7 @@ module ROmniture
       :sandbox        => "https://api-sbx1.omniture.com/admin/1.4/rest/"
     }
 
+    attr_accessor :max_tries, :wait_time
     def initialize(username, shared_secret, environment, options={})
       @username       = username
       @shared_secret  = shared_secret
