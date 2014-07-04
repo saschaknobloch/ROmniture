@@ -20,6 +20,24 @@ class ClientTest < Test::Unit::TestCase
     )
   end
 
+  def test_request_wo_params
+    response = @client.request("Report.GetQueue")
+
+    assert_instance_of Array, response, "returned object is not an array."
+  end
+
+  def test_request_w_params
+    response = @client.request("Report.Queue", {
+      "reportDescription" => {
+        "reportSuiteID" => "#{@config["report_suite_id"]}",
+        "date" => "2014-07-01",
+        "metrics" => [{"id" => "pageviews"}]
+    }})
+
+    assert_instance_of Hash, response, "Returned object is not a hash."
+    assert(response.has_key?("reportID"), "Returned hash has no data!")
+  end
+
   def test_get_report_suites
     response = @client.get_report_suites
 
@@ -31,8 +49,7 @@ class ClientTest < Test::Unit::TestCase
     response = @client.enqueue_report({
       "reportDescription" => {
         "reportSuiteID" => "#{@config["report_suite_id"]}",
-        "dateFrom" => "2014-07-01",
-        "dateTo" => "2014-07-07",
+        "date" => "2014-07-01",
         "metrics" => [{"id" => "pageviews"}]
     }})
 
@@ -45,8 +62,7 @@ class ClientTest < Test::Unit::TestCase
       response = @client.enqueue_report({
         "reportDescription" => {
           "reportSuiteID" => "#{@config["report_suite_id"]}",
-          "dateFrom" => "2014-07-01",
-          "dateTo" => "2014-07-07",
+          "date" => "2014-07-01",
           "metrics" => [{"id" => "INVALID_METRIXXXX"}]
       }})
     end
@@ -57,8 +73,7 @@ class ClientTest < Test::Unit::TestCase
       response = @client.enqueue_report({
         "reportDescription" => {
           "reportSuiteID" => "INVALID_REPORT_SUITE_ID",
-          "dateFrom" => "2014-07-01",
-          "dateTo" => "2014-07-07",
+          "date" => "2014-07-01",
           "metrics" => [{"id" => "pageVIews"}]
       }})
     end
@@ -69,12 +84,11 @@ class ClientTest < Test::Unit::TestCase
     assert_instance_of Array, response, "Returned object is not an array."
   end
 
-  def test_get_enqueued_report_wo_elements
+  def test_get_enqueued_report
     response = @client.enqueue_report({
       "reportDescription" => {
         "reportSuiteID" => "#{@config["report_suite_id"]}",
-        "dateFrom" => "2014-07-01",
-        "dateTo" => "2014-07-07",
+        "date" => "2014-07-01",
         "metrics" => [{"id" => "pageviews"}]
     }})
     report_id = response["reportID"]
@@ -83,5 +97,28 @@ class ClientTest < Test::Unit::TestCase
 
     assert_instance_of Hash, response, "Returned object is not a hash."
     assert(response["report"].has_key?("data"), "Returned hash has no data!")
+  end
+
+  def test_get_unfinished_enqueued_report_raises
+    response = @client.enqueue_report({
+      "reportDescription" => {
+        "reportSuiteID" => "#{@config["report_suite_id"]}",
+        "dateFrom" => "2011-07-01",
+        "dateTo" => "2014-07-07",
+        "metrics" => [{"id" => "pageviews"}]
+    }})
+    report_id = response["reportID"]
+
+    assert_raises ROmniture::Exceptions::TriesExceeded do
+      @client.max_tries = 1
+      response = @client.get_enqueued_report(report_id)
+    end
+  end
+
+  def test_get_metrics
+    response = @client.get_metrics(@config["report_suite_id"])
+
+    assert_instance_of Array, response, "Returned object is not a hash."
+    assert(response.first.has_key?("id"), "Returned array has no metrics!")
   end
 end
